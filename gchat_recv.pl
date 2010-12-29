@@ -35,28 +35,9 @@ use IO::Socket;
 	or die "Konnte keine Verbindung zu Server aufbauen $@\n";
 	$socket->autoflush(1);
 
-	die "Konnte nicht forken" unless defined(my $kidpid = fork());
-	if ($kidpid) {
-		while(defined(my $line = <$socket>)) {
-			print "REPLY: $line";
-		}
+	while(<$socket>) {
+		print;
 	}
-	else {
-		while(defined(my $line = <STDIN>)) {
-			print $socket $line;
-		}
-	}
-
-	#for my $i (1..5) {
-	#	print $socket "Nachricht von Client\n";
-		#my $back = <$socket>;
-		#print $back;
-	#}
-
-	#sleep(5);
-	#while(<$socket>) {
-	#	print;
-	#}
 
 	#push(@SOCKS, \$socket);
 	#sleep(5);

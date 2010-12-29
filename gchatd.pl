@@ -34,11 +34,13 @@ $SIG{CHLD} = 'IGNORE';
 ###
 # Pipes für potentielle Nutzer vorhalten
 my @CLIENT_PIPES;
-for my $i (1..30) {
+for my $i (0..29) {
 	my %hash;
-	pipe(PIPE_R, PIPE_W) or die "Konnte Pipe $i nicht erstellen";
-	$hash{"WRITER"} = *PIPE_W;
-	$hash{"READER"} = *PIPE_R;
+	my ($PIPE_R, $PIPE_W);
+	pipe($PIPE_R, $PIPE_W) or die "Konnte Pipe $i nicht erstellen";
+	$PIPE_W->autoflush(1);
+	$hash{"WRITER"} = \$PIPE_W;
+	$hash{"READER"} = \$PIPE_R;
 	$hash{"USED"} = 0;
 
 	push(@CLIENT_PIPES, \%hash);
@@ -50,6 +52,7 @@ print scalar(@CLIENT_PIPES) . "\n";
 ###
 # Nachrichten von Clients sammeln und zum Senden vorbereiten
 pipe(CONCENTRATOR_R, CONCENTRATOR_W) or die "pipe: $!";
+CONCENTRATOR_W->autoflush(1);
 
 
 my $DISPATCHER_PID = fork();
@@ -59,8 +62,10 @@ if (! $DISPATCHER_PID) {
 	
 	while(<CONCENTRATOR_R>) {
 		print "\nFROMSOCK: " . $_;
+
 		for my $hash (@CLIENT_PIPES) {
-			my $pipe = $hash->{"WRITER"};
+
+			my $pipe = ${$hash->{"WRITER"}};
 			print ".";
 			print $pipe $_;
 		}
@@ -93,7 +98,7 @@ while (my $CLIENT = $SERVER->accept()) {
 	print $UID . "\n";
 
 	$CLIENT_PIPES[$UID]->{"USED"} = 1;
-	my $MESSAGE_RECEIVER = $CLIENT_PIPES[$UID]->{"READER"};
+	my $MESSAGE_RECEIVER = ${$CLIENT_PIPES[$UID]->{"READER"}};
 	
 	###
 	# Sender erstellen
@@ -106,7 +111,7 @@ while (my $CLIENT = $SERVER->accept()) {
 	
 		while (<$MESSAGE_RECEIVER>) {
 			print "SENDTO: $_";
-			#print $CLIENT $_;
+			print $CLIENT $_;
 		}
 		close($CLIENT);
 		
