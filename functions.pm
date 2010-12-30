@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-#       gchat.pl
+#       functions.pl
 #       
 #       Copyright 2010 Philipp Böhm <philipp-boehm@live.de>
 #       
@@ -19,38 +19,30 @@
 #       Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #       MA 02110-1301, USA.
 #
-#		GroupChat-Client
+#		Utility-Datei für häufig gebrauchte Funktionen
 #
+package functions;
 
 use strict;
-use IO::Socket;
 
-my $socket = IO::Socket::INET->new( PeerAddr => "127.0.0.1",
-								PeerPort => 12345,
-								Proto => "tcp",
-								Type => SOCK_STREAM ) 
-or die "Konnte keine Verbindung zu Server aufbauen $@\n";
-$socket->autoflush(1);
+sub unpack_pkg {
+	###
+	# Extrahiert die Teile einer Nachricht
+	my $pkg = shift;
+	chomp($pkg);
 
-my $login_msg = sprintf "LOGIN#0#102#22ed6eeb765ed5a87ce0fea112dc3125\n";
-print $socket $login_msg;
-
-
-
-for my $i (1..5) {
-	my $mess = sprintf("MESSAGE#101#102#%s\n", "Nachricht von Client");
-	print $socket $mess;
+	if ($pkg =~ /^(\w+)#(\d*)#(\d*)#(.*)$/) {
+		my %hash;
+		$hash{TYPE} = $1;
+		$hash{TO} = $2;
+		$hash{FROM} = $3;
+		$hash{PAYLOAD} = $4;
+		return \%hash;
+	}
+	else {
+		return undef;
+	}
 }
 
 
-#die "Konnte nicht forken" unless defined(my $kidpid = fork());
-#if ($kidpid) {
-	#while(defined(my $line = <$socket>)) {
-		#print "REPLY: $line";
-	#}
-#}
-#else {
-	#while(defined(my $line = <STDIN>)) {
-		#print $socket $line;
-	#}
-#}
+1;

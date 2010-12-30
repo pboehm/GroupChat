@@ -25,32 +25,16 @@
 use strict;
 use IO::Socket;
 
-#my @SOCKS;
+my $socket = IO::Socket::INET->new( PeerAddr => "127.0.0.1",
+								PeerPort => 12345,
+								Proto => "tcp",
+								Type => SOCK_STREAM ) 
+or die "Konnte keine Verbindung zu Server aufbauen $@\n";
+$socket->autoflush(1);
 
-#for (my $i = 0; $i < 1; $i++) {
-	my $socket = IO::Socket::INET->new( PeerAddr => "127.0.0.1",
-									PeerPort => 12345,
-									Proto => "tcp",
-									Type => SOCK_STREAM ) 
-	or die "Konnte keine Verbindung zu Server aufbauen $@\n";
-	$socket->autoflush(1);
+my $login_msg = sprintf "LOGIN#0#101#22ed6eeb765ed5a87ce0fea112dc3125\n";
+print $socket $login_msg;
 
-	while(<$socket>) {
-		print;
-	}
-
-	#push(@SOCKS, \$socket);
-	#sleep(5);
-#}
-
-
-#while (1) {
-	#my $nmbr = rand @SOCKS;
-	#my $sock = ${$SOCKS[$nmbr]}; 
-	#print $sock "Nachricht von Client $nmbr\n";
-	#sleep(2);
-#}
-
-#for my $socket (@SOCKS) {
-	#close($socket);
-#}
+while(<$socket>) {
+	print;
+}
