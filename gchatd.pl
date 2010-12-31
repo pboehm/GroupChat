@@ -23,26 +23,33 @@
 #
 #		Chat-Server der die Nachrichten von Clients annimmt und verteilt,
 #		sowie die Clients steuert
+chdir(dirname($0));
 
 use strict;
-
 use IO::Socket;
 use Socket;
-use POSIX qw(:sys_wait_h);
-use DB_File;
 use DBI;
 use File::Basename;
+use Getopt::Long;
 require functions;
 
-chdir(dirname($0));
 $SIG{CHLD} = 'IGNORE';
 
+################################################################################
+#################### Kommandozeilenparameter parsen ############################
+################################################################################
+my %PARAMS = ();
+GetOptions(	\%PARAMS,
+			"help" => \&help,
+			"verbose",
+		);
 
-print "Starting gchatd ...\n";
 
 ################################################################################
 #################### Client-Pipes erstellen ####################################
 ################################################################################
+print "Starte GroupChat-Chatserver ...\n";
+
 print "Erzeuge Pipes für die Kommunikation mit den geforkten Childs\n";
 my @CLIENT_PIPES;
 for my $i (0..30) {
@@ -52,12 +59,12 @@ for my $i (0..30) {
 	$PIPE_W->autoflush(1);
 	$hash{"WRITER"} = \$PIPE_W;
 	$hash{"READER"} = \$PIPE_R;
-	$hash{"USED"} = 0;
 
 	push(@CLIENT_PIPES, \%hash);
 }
 
 printf "Pipes: %s\n", scalar(@CLIENT_PIPES);
+
 
 ################################################################################
 ###################### Verbindung zur Nutzerdatenbank aufbauen #################
@@ -74,6 +81,7 @@ $dbh->do('UPDATE user SET is_active = 0;');
 my $stmt = $dbh->prepare('SELECT COUNT(*) FROM user;');
 $stmt->execute();
 printf "existierende Nutzer: %s\n", ($stmt->fetchrow_array)[0];
+
 
 ################################################################################
 ############################## DISPATCHER ######################################
@@ -99,6 +107,7 @@ if (! $dispatcher) {
 		my $pkg_ref = functions::unpack_pkg($pkg);
 		next unless $pkg_ref;
 
+		# Socket-Nr ermitteln
 		$sock_nr->execute($pkg_ref->{TO});
 		my $nr = ($sock_nr->fetchrow_array)[0];
 		next unless $nr;
@@ -136,12 +145,14 @@ my $set_sock_nr = $dbh->prepare('UPDATE user SET sock_nr = ?, is_active = 1
 print "Warte auf eingehende Client-Verbindungen\n";
 while (my $CLIENT = $SERVER->accept()) {
 
+	# Gegenstelle des Sockets bestimmen
 	my $sock_end = getpeername($CLIENT);
 	my ($port, $iaddr) = unpack_sockaddr_in($sock_end);
 	printf "\nEingehender Request von %s:%s\n", inet_ntoa($iaddr), $port;
 
-	####
-	# Nutzer authentifizieren
+	##############################
+	# Nutzer authentifizieren ####
+	##############################
 
 	# Paket beziehen
 	my $login_pkg = <$CLIENT>;
@@ -176,11 +187,11 @@ while (my $CLIENT = $SERVER->accept()) {
 	printf "Socketnr: %s\n", $sock_nr;
 
 
-	$CLIENT_PIPES[$sock_nr]->{"USED"} = 1;
 	my $MESSAGE_RECEIVER = ${$CLIENT_PIPES[$sock_nr]->{"READER"}};
 	
-	###
-	# Sender erstellen
+	###########################
+	# Sender erstellen ########
+	###########################
 	print "Forke Sender-Process\n";
 
 	my $sender = fork;
@@ -197,8 +208,9 @@ while (my $CLIENT = $SERVER->accept()) {
 		exit; # Ende des Sender-Processes
 	}
 
-	###
-	# Empfänger erstellen
+	###########################
+	# Empfänger erstellen #####
+	###########################
 	print "Forke Empfänger-Process\n";
 
 	my $receiver = fork;
@@ -219,4 +231,25 @@ while (my $CLIENT = $SERVER->accept()) {
 }
 continue {
 	close($CLIENT);
+}
+
+################################################################################
+########################## Funktionsdefinitionen ###############################
+################################################################################
+
+sub help {
+    print << "EOF";
+
+Copyright 2011 Philipp Böhm
+
+GroupChat-Daemon ist ein Chat-Server, der Clients authentifiziert
+und die erhaltenen Nachrichten zustellt.
+    
+Usage: $0 [Optionen]
+
+   --help               : Diesen Hilfetext ausgeben
+   --verbose            : erweiterte Ausgaben
+                          
+EOF
+    exit();
 }
