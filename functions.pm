@@ -43,6 +43,9 @@ sub unpack_pkg {
     return undef unless $pkg;
     chomp($pkg);
 
+    # \r\n herausfiltern
+    $pkg =~ s/(\n|\r)//g;
+
     if ( $pkg =~ /^(\w+)#(\d*)#(\d*)#(.*)$/ ) {
         my %hash;
         $hash{TYPE}    = $1;

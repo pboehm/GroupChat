@@ -23,6 +23,10 @@
 #
 #		Chat-Server der die Nachrichten von Clients annimmt und verteilt,
 #		sowie die Clients steuert
+#
+#		TODO: Wenn ein Client die Verbindung beendet, soll er in der
+#		Datenbank deaktiviert werden
+#
 chdir( dirname($0) );
 
 use strict;
