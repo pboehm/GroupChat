@@ -66,7 +66,7 @@ sub build_pkg {
         TYPE    => "ERROR",
         TO      => "0",
         FROM    => "0",
-        MESSAGE => "",
+        PAYLOAD => "",
         @_,
     );
 

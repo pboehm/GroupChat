@@ -24,9 +24,7 @@
 #		Chat-Server der die Nachrichten von Clients annimmt und verteilt,
 #		sowie die Clients steuert
 #
-#		TODO: Wenn ein Client die Verbindung beendet, soll er in der
-#		Datenbank deaktiviert werden
-#
+
 chdir( dirname($0) );
 
 use strict;
@@ -67,7 +65,7 @@ for my $i ( 0 .. 30 ) {
     push( @CLIENT_PIPES, \%hash );
 }
 
-printf "Pipes: %s\n", scalar(@CLIENT_PIPES);
+printf "Vorhandene Pipes: %s\n", scalar(@CLIENT_PIPES);
 
 ################################################################################
 ###################### Verbindung zur Nutzerdatenbank aufbauen #################
@@ -102,21 +100,76 @@ my $dispatcher = fork();
 if ( !$dispatcher ) {
     die "Failed to fork the Dispatcher $!" unless defined $dispatcher;
 
-    my $sock_nr = $dbh->prepare('SELECT sock_nr FROM user WHERE uid = ?;');
+    my $sock_nr      = $dbh->prepare('SELECT sock_nr FROM user WHERE uid = ?;');
+    my $active_users = $dbh->prepare(
+        'SELECT uid,username,sock_nr FROM user WHERE is_active = 1;');
+    my $change_user_status =
+      $dbh->prepare('UPDATE user SET is_active = 0 WHERE uid = ?');
 
     while ( my $pkg = <CONCENTRATOR_R> ) {
 
         my $pkg_ref = unpack_pkg($pkg);
         next unless $pkg_ref;
 
-        # Socket-Nr ermitteln
-        $sock_nr->execute( $pkg_ref->{TO} );
-        my $nr = ( $sock_nr->fetchrow_array )[0];
-        next unless $nr;
+        unless ( $pkg_ref->{TO} == 0 ) {
+            ###
+            # Normale Pakete versenden
 
-        my $pipe = ${ $CLIENT_PIPES[$nr]->{"WRITER"} };
-        print $pipe $pkg;
+            # Socket-Nr ermitteln
+            $sock_nr->execute( $pkg_ref->{TO} );
+            my $nr = ( $sock_nr->fetchrow_array )[0];
+            next unless $nr;
 
+            my $pipe = ${ $CLIENT_PIPES[$nr]->{WRITER} };
+            print $pipe $pkg;
+        }
+        else {
+            ###
+            # Spezielle Pakete versenden
+
+            if ( $pkg_ref->{TYPE} =~ /NEW_USER/ ) {
+                ###
+                # User-Liste verschicken
+                $active_users->execute();
+                my @user_data;
+                while (
+                    defined( my $line_ref = $active_users->fetchrow_hashref ) )
+                {
+                    my %data;
+                    $data{UID}    = $line_ref->{uid};
+                    $data{USER}   = $line_ref->{username};
+                    $data{SOCKET} = $line_ref->{sock_nr};
+                    push( @user_data, \%data );
+                }
+
+                # Userliste zusammenbauen
+                my $payload = "";
+                for my $user_ref (@user_data) {
+                    my $part = sprintf "%s:%s|", $user_ref->{UID},
+                      $user_ref->{USER};
+                    $payload .= $part;
+                }
+                $payload =~ s/\|$//;
+
+                # verschicken
+                for my $user_ref (@user_data) {
+                    my $pipe =
+                      ${ $CLIENT_PIPES[ $user_ref->{SOCKET} ]->{WRITER} };
+                    print $pipe build_pkg(
+                        TYPE    => "USER_LIST",
+                        TO      => $user_ref->{UID},
+                        PAYLOAD => $payload
+                    );
+                }
+            }
+            elsif ( $pkg_ref->{TYPE} =~ /USER_LOGOUT/ ) {
+                ###
+                # User ausloggen
+                $change_user_status->execute( $pkg_ref->{FROM} );
+                printf "Nutzer %s erfolgreich ausgeloggt\n", $pkg_ref->{FROM};
+            }
+
+        }
     }
 
     close(CONCENTRATOR_R);
@@ -153,7 +206,6 @@ my $create_user = $dbh->prepare(
 );
 my $select_uid = $dbh->prepare('SELECT uid FROM user WHERE username = ?;');
 
-
 ##################################
 # Client-Verbindungen initiieren #
 ##################################
@@ -183,7 +235,7 @@ while ( my $CLIENT = $SERVER->accept() ) {
             $select_uid->execute($1);
             my $uid = ( ( $select_uid->fetchrow_array )[0] );
 
-            print $CLIENT build_pkg( TYPE => "REGISTER", PAYLOAD => $uid );
+            print $CLIENT build_pkg( TYPE => "INFORM", PAYLOAD => $uid );
             printf "Nutzer %s hat die UID %s\n", $1, $uid;
             next;
         }
@@ -225,6 +277,7 @@ while ( my $CLIENT = $SERVER->accept() ) {
         print "erfolgreich authentifiziert\n";
     }
 
+    ###
     # Socket-Nr generieren und entsprechende Pipe zuweisen
     my $sock_nr;
     while (1) {
@@ -284,16 +337,36 @@ while ( my $CLIENT = $SERVER->accept() ) {
         close($CLIENT);
 
         ###
-        # Sender-Prozess zum Beenden auffordern
+        # Sender-Prozess zum Beenden auffordern und User ausloggen
         printf "Empfänger von %s geschlossen\n", $uid;
+
         print CONCENTRATOR_W build_pkg(
-            TYPE    => "SENDER_SHUTDOWN",
-            TO      => $uid,
-            PAYLOAD => "Socket-Shutdown"
+            TYPE => "SENDER_SHUTDOWN",
+            TO   => $uid
+        );
+
+        print CONCENTRATOR_W build_pkg(
+            TYPE => "USER_LOGOUT",
+            FROM => $uid
+        );
+
+        # Aktuelle Nutzerliste verschicken
+        sleep(1);
+        print CONCENTRATOR_W build_pkg(
+            TYPE => "NEW_USER",
+            FROM => $uid
         );
 
         exit;    # Ende des Receiver-Processes
     }
+
+    ###
+    # Paket an Dispatcher schicken, dass er eine aktualisierte
+    # Nutzerliste verschickt
+    print CONCENTRATOR_W build_pkg(
+        TYPE => "NEW_USER",
+        FROM => $uid
+    );
 
 }
 continue {

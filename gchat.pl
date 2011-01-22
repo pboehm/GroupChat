@@ -75,7 +75,7 @@ if ( $PARAMS{"register"} ) {
 
     while ( defined( my $pkg = <$socket> ) ) {
         my $parts = unpack_pkg($pkg);
-        if ( $parts->{TYPE} =~ /REGISTER/ ) {
+        if ( $parts->{TYPE} =~ /INFORM/ ) {
             printf "Der Nutzer wurde mit der UID >>%s<< angelegt\n",
               $parts->{PAYLOAD};
         }
