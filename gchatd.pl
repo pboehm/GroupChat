@@ -2,7 +2,7 @@
 
 #       gchatd.pl
 #
-#       Copyright 2010 Philipp Böhm <philipp-boehm@live.de>
+#       Copyright 2011 Philipp Böhm <philipp-boehm@live.de>
 #
 #       This program is free software; you can redistribute it and/or modify
 #       it under the terms of the GNU General Public License as published by
@@ -40,12 +40,15 @@ $SIG{CHLD} = 'IGNORE';
 ################################################################################
 #################### Kommandozeilenparameter parsen ############################
 ################################################################################
-my %PARAMS = ();
+my %PARAMS = ( port => 12345, pipes => 100 );
+
 GetOptions(
     \%PARAMS,
     "help" => \&help,
     "verbose",
-);
+    "port=i",
+    "pipes=i",
+) or die "Fehler bei der Parameterübergabe";
 
 ################################################################################
 #################### Client-Pipes erstellen ####################################
@@ -54,7 +57,7 @@ print "Starte GroupChat-Chatserver ...\n";
 
 print "Erzeuge Pipes für die Kommunikation mit den geforkten Childs\n";
 my @CLIENT_PIPES;
-for my $i ( 0 .. 30 ) {
+for my $i ( 0 .. $PARAMS{"pipes"} ) {
     my %hash;
     my ( $PIPE_R, $PIPE_W );
     pipe( $PIPE_R, $PIPE_W ) or die "Konnte Pipe $i nicht erstellen";
@@ -181,7 +184,7 @@ if ( !$dispatcher ) {
 ################################################################################
 print "Erstelle Socket und binde an Port\n";
 my $SERVER = IO::Socket::INET->new(
-    LocalPort => 12345,
+    LocalPort => $PARAMS{"port"},
     Type      => SOCK_STREAM,
     Reuse     => 1,
     Listen    => 10
@@ -389,6 +392,9 @@ Usage: $0 [Optionen]
 
    --help               : Diesen Hilfetext ausgeben
    --verbose            : erweiterte Ausgaben
+   --port=54321         : abweichenden Port festlegen (Standard= 12345)
+   --pipes=150          : abweichende Anzahl an Pipes erstellen, sodass mehr
+                          als 100 Nutzer gleichzeitig angemeldet sein können
                           
 EOF
     exit();
